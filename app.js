@@ -1,8 +1,6 @@
 const STORAGE_KEY = "sixAsideFootballManager:quarter:2026-05";
 const PREVIOUS_RANKS_KEY = "sixAsideFootballManager:previousRanks";
-const SUPABASE_URL = "https://vvyrgcxqlmduaijzznil.supabase.co";
-const SUPABASE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2eXJnY3hxbG1kdWFqaXp6bmlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MzA0NDMsImV4cCI6MjA5NDEwNjQ0M30.vliNa1OOEUy_uSabBq-aPxyCrI7e42PnGdPCetfIvWE";
+const API_BASE = "/api";
 const ADMIN_PASSWORD = "thursdayfootball196!";
 const PROTECTED_VIEWS = new Set(["admin", "leaderboard"]);
 
@@ -196,11 +194,9 @@ function correctHistoricalNightDate(nights) {
 }
 
 async function supabaseFetch(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const response = await fetch(`${API_BASE}/${path}`, {
     ...options,
     headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
