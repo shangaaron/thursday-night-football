@@ -504,6 +504,13 @@ tbody tr:last-child td {
   padding: 16px;
 }
 
+.history-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .history-teams {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -532,7 +539,8 @@ tbody tr:last-child td {
 
   .app-header,
   .section-heading,
-  .night-actions {
+  .night-actions,
+  .history-card-heading {
     align-items: stretch;
   }
 

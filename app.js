@@ -734,8 +734,13 @@ function renderHistory() {
     .map(
       (night) => `
         <article class="history-card">
-          <h3>${formatDate(night.date)}</h3>
-          <p class="muted">${night.selectedPlayers.length} players</p>
+          <div class="history-card-heading">
+            <div>
+              <h3>${formatDate(night.date)}</h3>
+              <p class="muted">${night.selectedPlayers.length} players</p>
+            </div>
+            <button class="small-button danger-button" data-delete-night="${night.id}">Remove night</button>
+          </div>
           <div class="history-teams">
             ${night.teams
               .map(
@@ -757,6 +762,35 @@ function renderHistory() {
       `,
     )
     .join("");
+
+  historyList.querySelectorAll("[data-delete-night]").forEach((button) => {
+    button.addEventListener("click", () => deleteNight(button.dataset.deleteNight));
+  });
+}
+
+async function deleteNight(id) {
+  if (!ensureAdminAccess("remove a historical night")) return;
+
+  const night = state.nights.find((item) => item.id === id);
+  const label = night ? formatDate(night.date) : "this night";
+  const shouldDelete = window.confirm(
+    `Remove ${label}? This will subtract that night's games and goal differences from the players.`,
+  );
+  if (!shouldDelete) return;
+
+  try {
+    await supabaseFetch("rpc/remove_match_night_and_reverse", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ target_night_id: id }),
+    });
+    selectedPlayerIds = [];
+    generatedTeams = [];
+    await loadRemoteData();
+  } catch (error) {
+    console.error(error);
+    window.alert(`Historical night could not be removed. ${error.message}`);
+  }
 }
 
 function showWarning(message) {
