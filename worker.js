@@ -1,4 +1,4 @@
-const SUPABASE_URL = "https://vvyrgcxqlmduaijzznil.supabase.co";
+const SUPABASE_URL = "https://vvyrgcxqlmduajizznil.supabase.co";
 const SUPABASE_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2eXJnY3hxbG1kdWFqaXp6bmlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MzA0NDMsImV4cCI6MjA5NDEwNjQ0M30.vliNa1OOEUy_uSabBq-aPxyCrI7e42PnGdPCetfIvWE";
 
