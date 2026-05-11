@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thursday Night Football</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Hampton 6-a-side</p>
+        <h1>Thursday Night Football</h1>
+      </div>
+      <div class="nav-wrap">
+        <nav class="top-tabs" aria-label="Admin sections">
+          <button class="tab-button is-active" data-view="night">Team Night</button>
+          <button class="tab-button" data-view="admin">Admin</button>
+          <button class="tab-button" data-view="history">History</button>
+        </nav>
+        <button class="leaderboard-link" data-view="leaderboard">Leaderboard</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="leaderboard" class="view" aria-labelledby="leaderboard-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Public page</p>
+            <h2 id="leaderboard-title">Player Leaderboard</h2>
+          </div>
+          <button id="reset-demo" class="ghost-button">Reset demo data</button>
+        </div>
+
+        <div class="podium" id="podium"></div>
+
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Games</th>
+                <th>Goal diff</th>
+                <th>Score</th>
+                <th>Move</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="night" class="view is-active" aria-labelledby="night-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Private admin</p>
+            <h2 id="night-title">Team Generator & Results</h2>
+          </div>
+          <div class="night-actions">
+            <input id="night-date" type="date" aria-label="Football night date" />
+            <button id="generate-teams" class="primary-button">Generate teams</button>
+          </div>
+        </div>
+
+        <div class="split-layout">
+          <aside class="panel">
+            <div class="panel-title">
+              <h3>Select 18 players</h3>
+              <span id="selection-count" class="count-pill">0 / 18</span>
+            </div>
+            <div id="player-selector" class="player-selector"></div>
+          </aside>
+
+          <div class="night-main">
+            <div id="team-warning" class="notice"></div>
+            <div id="teams-output" class="teams-grid"></div>
+
+            <section class="panel results-panel">
+              <div class="panel-title">
+                <h3>Enter results</h3>
+                <button id="save-results" class="primary-button">Save results</button>
+              </div>
+              <div id="results-inputs" class="results-inputs"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section id="admin" class="view" aria-labelledby="admin-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Private admin</p>
+            <h2 id="admin-title">Manage Players</h2>
+          </div>
+        </div>
+
+        <form id="player-form" class="player-form">
+          <input type="hidden" id="player-id" />
+          <label>
+            <span>Name</span>
+            <input id="player-name" type="text" autocomplete="off" required />
+          </label>
+          <label>
+            <span>Games played</span>
+            <input id="player-games" type="number" min="0" step="1" required />
+          </label>
+          <label>
+            <span>Goal difference</span>
+            <input id="player-goal-diff" type="number" step="1" required />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary-button">Save player</button>
+            <button type="button" id="cancel-edit" class="ghost-button">Cancel</button>
+          </div>
+        </form>
+
+        <div id="admin-list" class="admin-list"></div>
+      </section>
+
+      <section id="history" class="view" aria-labelledby="history-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Archive</p>
+            <h2 id="history-title">Past Football Nights</h2>
+          </div>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
