@@ -600,7 +600,7 @@ async function saveResults() {
     state.nights.unshift(night);
   } catch (error) {
     console.error(error);
-    showWarning("Results could not be saved to the live database. Please try again.");
+    showWarning(`Results could not be saved to the live database. ${error.message}`);
     await loadRemoteData();
     return;
   }
