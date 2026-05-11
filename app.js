@@ -1,4 +1,9 @@
 const STORAGE_KEY = "sixAsideFootballManager:quarter:2026-05";
+const PREVIOUS_RANKS_KEY = "sixAsideFootballManager:previousRanks";
+const SUPABASE_URL = "https://vvyrgcxqlmduaijzznil.supabase.co";
+const SUPABASE_KEY = "sb_publishable_H2zORUy2YzS5Ap4K5J3V8w_9oyyyKuU";
+const ADMIN_PASSWORD = "thursdayfootball196!";
+const PROTECTED_VIEWS = new Set(["admin", "leaderboard"]);
 
 const demoPlayers = [
   ["Josh", 5, 19],
@@ -33,7 +38,11 @@ const demoPlayers = [
   ["Si", 3, -40],
 ];
 
-const state = loadState();
+const state = {
+  players: [],
+  nights: [],
+  previousRanks: loadPreviousRanks(),
+};
 let selectedPlayerIds = [];
 let generatedTeams = [];
 
@@ -61,13 +70,15 @@ navButtons.forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 
-document.getElementById("generate-teams").addEventListener("click", generateTeams);
+document.getElementById("generate-teams").addEventListener("click", () => {
+  if (ensureAdminAccess("generate teams")) generateTeams();
+});
 document.getElementById("save-results").addEventListener("click", saveResults);
 document.getElementById("cancel-edit").addEventListener("click", resetPlayerForm);
-document.getElementById("reset-demo").addEventListener("click", resetDemoData);
+document.getElementById("reset-demo").addEventListener("click", loadRemoteData);
 playerForm.addEventListener("submit", savePlayer);
 
-renderAll();
+initApp();
 
 function calculateScore(player) {
   return Number(player.goalDifference) + Number(player.gamesPlayed) * 5;
@@ -96,61 +107,175 @@ function rankedPlayers(players = state.players) {
 }
 
 function setView(viewId) {
+  if (PROTECTED_VIEWS.has(viewId) && !ensureAdminAccess(`open ${viewId}`)) return;
+
   views.forEach((view) => view.classList.toggle("is-active", view.id === viewId));
   navButtons.forEach((button) =>
     button.classList.toggle("is-active", button.dataset.view === viewId),
   );
 }
 
-function loadState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
+async function initApp() {
+  renderLoading();
+  await loadRemoteData();
+}
+
+function renderLoading() {
+  playerSelector.innerHTML = '<p class="muted">Loading players...</p>';
+  adminList.innerHTML = '<p class="muted">Loading players...</p>';
+  historyList.innerHTML = '<p class="muted">Loading history...</p>';
+  leaderboardBody.innerHTML = "";
+}
+
+async function loadRemoteData() {
+  try {
+    const [players, nights] = await Promise.all([fetchPlayers(), fetchMatchNights()]);
+    state.players = players;
+    state.nights = nights;
+    saveLocalSnapshot();
+    renderAll();
+  } catch (error) {
+    console.error(error);
+    loadLocalFallback();
+    renderAll();
+    showWarning("Live data could not be loaded. Showing the last saved copy on this device.");
+  }
+}
+
+function loadPreviousRanks() {
+  return JSON.parse(localStorage.getItem(PREVIOUS_RANKS_KEY) || "{}");
+}
+
+function persistPreviousRanks() {
+  localStorage.setItem(PREVIOUS_RANKS_KEY, JSON.stringify(state.previousRanks));
+}
+
+function saveLocalSnapshot() {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      players: state.players,
+      nights: state.nights,
+    }),
+  );
+}
+
+function loadLocalFallback() {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
   if (saved) {
-    const parsedState = JSON.parse(saved);
-    const migratedState = correctHistoricalNightDate(parsedState);
-    if (migratedState.wasChanged) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedState.state));
-    }
-    return migratedState.state;
+    state.players = saved.players || [];
+    state.nights = correctHistoricalNightDate(saved.nights || []);
+    return;
   }
 
   const now = new Date().toISOString();
-  return {
-    players: demoPlayers.map(([name, gamesPlayed, goalDifference]) => ({
-      id: crypto.randomUUID(),
-      name,
-      gamesPlayed,
-      goalDifference,
-      createdAt: now,
-      updatedAt: now,
-    })),
-    nights: [],
-    previousRanks: {},
-  };
+  state.players = demoPlayers.map(([name, gamesPlayed, goalDifference]) => ({
+    id: crypto.randomUUID(),
+    name,
+    gamesPlayed,
+    goalDifference,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  state.nights = [];
 }
 
-function correctHistoricalNightDate(savedState) {
-  let wasChanged = false;
-  const nights = (savedState.nights || []).map((night) => {
-    if (night.date !== "2026-05-11") return night;
-    wasChanged = true;
-    return {
-      ...night,
-      date: "2026-05-08",
-      updatedAt: new Date().toISOString(),
-    };
+function correctHistoricalNightDate(nights) {
+  return nights.map((night) =>
+    night.date === "2026-05-11"
+      ? {
+          ...night,
+          date: "2026-05-08",
+          updatedAt: new Date().toISOString(),
+        }
+      : night,
+  );
+}
+
+async function supabaseFetch(path, options = {}) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_KEY,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
   });
 
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Supabase request failed with ${response.status}`);
+  }
+
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+async function fetchPlayers() {
+  const rows = await supabaseFetch("players?select=*&order=name.asc");
+  return rows.map(fromDbPlayer);
+}
+
+async function fetchMatchNights() {
+  const rows = await supabaseFetch("match_nights?select=*&order=date.desc,created_at.desc");
+  return correctHistoricalNightDate(rows.map(fromDbNight));
+}
+
+function fromDbPlayer(row) {
   return {
-    state: {
-      ...savedState,
-      nights,
-    },
-    wasChanged,
+    id: row.id,
+    name: row.name,
+    gamesPlayed: row.games_played,
+    goalDifference: row.goal_difference,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
-function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function toDbPlayer(player) {
+  return {
+    name: player.name,
+    games_played: player.gamesPlayed,
+    goal_difference: player.goalDifference,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function fromDbNight(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    selectedPlayers: row.selected_players || [],
+    teams: row.teams || [],
+    teamResults: row.team_results || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toDbNight(night) {
+  return {
+    date: night.date,
+    selected_players: night.selectedPlayers,
+    teams: night.teams,
+    team_results: night.teamResults,
+    updated_at: night.updatedAt,
+  };
+}
+
+function ensureAdminAccess(action) {
+  if (sessionStorage.getItem("tnfAdminUnlocked") === "true") return true;
+
+  const enteredPassword = window.prompt(`Enter the admin password to ${action}.`);
+  if (enteredPassword === ADMIN_PASSWORD) {
+    sessionStorage.setItem("tnfAdminUnlocked", "true");
+    return true;
+  }
+
+  if (enteredPassword !== null) {
+    window.alert("Incorrect password.");
+  }
+  return false;
 }
 
 function renderAll() {
@@ -404,7 +529,9 @@ function findTeamSlot(playerId) {
   return null;
 }
 
-function saveResults() {
+async function saveResults() {
+  if (!ensureAdminAccess("save results")) return;
+
   if (selectedPlayerIds.length !== 18 || generatedTeams.length !== 3) {
     showWarning("Generate teams from exactly 18 selected players before saving results.");
     return;
@@ -412,12 +539,14 @@ function saveResults() {
 
   const currentRanks = Object.fromEntries(rankedPlayers().map((player) => [player.id, player.rank]));
   state.previousRanks = currentRanks;
+  persistPreviousRanks();
 
   const resultInputs = [...resultsInputs.querySelectorAll("input")];
   const resultsByTeam = Object.fromEntries(
     resultInputs.map((input) => [input.dataset.teamId, Number(input.value || 0)]),
   );
   const now = new Date().toISOString();
+  const updatedPlayers = [];
 
   generatedTeams.forEach((team) => {
     const teamGoalDifference = resultsByTeam[team.id] || 0;
@@ -427,10 +556,11 @@ function saveResults() {
       player.gamesPlayed += 1;
       player.goalDifference += teamGoalDifference;
       player.updatedAt = now;
+      updatedPlayers.push(player);
     });
   });
 
-  state.nights.unshift({
+  const night = {
     id: crypto.randomUUID(),
     date: nightDate.value || new Date().toISOString().slice(0, 10),
     selectedPlayers: selectedPlayerIds,
@@ -450,11 +580,34 @@ function saveResults() {
     })),
     createdAt: now,
     updatedAt: now,
-  });
+  };
+
+  try {
+    await Promise.all(
+      updatedPlayers.map((player) =>
+        supabaseFetch(`players?id=eq.${player.id}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(toDbPlayer(player)),
+        }),
+      ),
+    );
+    await supabaseFetch("match_nights", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(toDbNight(night)),
+    });
+    state.nights.unshift(night);
+  } catch (error) {
+    console.error(error);
+    showWarning("Results could not be saved to the live database. Please try again.");
+    await loadRemoteData();
+    return;
+  }
 
   selectedPlayerIds = [];
   generatedTeams = [];
-  persist();
+  saveLocalSnapshot();
   renderAll();
   setView("night");
 }
@@ -485,8 +638,10 @@ function renderAdmin() {
   });
 }
 
-function savePlayer(event) {
+async function savePlayer(event) {
   event.preventDefault();
+  if (!ensureAdminAccess("manage players")) return;
+
   const now = new Date().toISOString();
   const payload = {
     name: playerName.value.trim(),
@@ -496,20 +651,37 @@ function savePlayer(event) {
 
   if (!payload.name) return;
 
-  if (playerId.value) {
-    const player = state.players.find((item) => item.id === playerId.value);
-    Object.assign(player, payload, { updatedAt: now });
-  } else {
-    state.players.push({
-      id: crypto.randomUUID(),
-      ...payload,
-      createdAt: now,
-      updatedAt: now,
-    });
+  try {
+    if (playerId.value) {
+      const player = state.players.find((item) => item.id === playerId.value);
+      const updatedPlayer = { ...player, ...payload, updatedAt: now };
+      const [savedPlayer] = await supabaseFetch(`players?id=eq.${playerId.value}&select=*`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(toDbPlayer(updatedPlayer)),
+      });
+      Object.assign(player, fromDbPlayer(savedPlayer));
+    } else {
+      const [savedPlayer] = await supabaseFetch("players?select=*", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(
+          toDbPlayer({
+            ...payload,
+            updatedAt: now,
+          }),
+        ),
+      });
+      state.players.push(fromDbPlayer(savedPlayer));
+    }
+  } catch (error) {
+    console.error(error);
+    window.alert("Player could not be saved to the live database. Please try again.");
+    return;
   }
 
   resetPlayerForm();
-  persist();
+  saveLocalSnapshot();
   renderAll();
 }
 
@@ -523,11 +695,24 @@ function editPlayer(id) {
   playerName.focus();
 }
 
-function deletePlayer(id) {
+async function deletePlayer(id) {
+  if (!ensureAdminAccess("remove players")) return;
+
+  try {
+    await supabaseFetch(`players?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    });
+  } catch (error) {
+    console.error(error);
+    window.alert("Player could not be removed from the live database. Please try again.");
+    return;
+  }
+
   state.players = state.players.filter((player) => player.id !== id);
   selectedPlayerIds = selectedPlayerIds.filter((playerIdValue) => playerIdValue !== id);
   generatedTeams = [];
-  persist();
+  saveLocalSnapshot();
   renderAll();
 }
 
@@ -578,16 +763,11 @@ function showWarning(message) {
   teamWarning.classList.toggle("is-visible", Boolean(message));
 }
 
-function resetDemoData() {
-  localStorage.removeItem(STORAGE_KEY);
-  const fresh = loadState();
-  state.players = fresh.players;
-  state.nights = fresh.nights;
-  state.previousRanks = fresh.previousRanks;
+async function resetDemoData() {
+  if (!ensureAdminAccess("reload live data")) return;
   selectedPlayerIds = [];
   generatedTeams = [];
-  persist();
-  renderAll();
+  await loadRemoteData();
 }
 
 function formatSigned(value) {
