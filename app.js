@@ -138,7 +138,9 @@ async function loadRemoteData() {
     console.error(error);
     loadLocalFallback();
     renderAll();
-    showWarning("Live data could not be loaded. Showing the last saved copy on this device.");
+    showWarning(
+      `Live data could not be loaded. Showing the last saved copy on this device. ${error.message}`,
+    );
   }
 }
 
