@@ -197,6 +197,7 @@ async function supabaseFetch(path, options = {}) {
     ...options,
     headers: {
       apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
