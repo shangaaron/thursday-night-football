@@ -412,7 +412,7 @@ tbody tr:last-child td {
 
 .team-player {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(126px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.7fr) minmax(120px, 0.7fr);
   align-items: end;
   gap: 10px;
   padding: 10px 0;

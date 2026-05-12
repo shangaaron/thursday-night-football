@@ -510,6 +510,10 @@ function renderTeams() {
       label: `${player.name} (${team.name})`,
     })),
   );
+  const selectedSet = new Set(selectedPlayerIds);
+  const replacementOptions = rankedPlayers()
+    .filter((player) => !selectedSet.has(player.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   teamsOutput.innerHTML = generatedTeams
     .map(
@@ -523,7 +527,7 @@ function renderTeams() {
             <div class="stat-box"><span class="muted">Total</span><strong>${team.totalScore}</strong></div>
             <div class="stat-box"><span class="muted">Average</span><strong>${team.averageScore.toFixed(1)}</strong></div>
           </div>
-          <p class="override-note">Manual override: swap any player with another team.</p>
+          <p class="override-note">Manual override: swap players across teams or replace a player from the main pool.</p>
           <div class="team-list">
             ${team.players
               .map(
@@ -545,6 +549,18 @@ function renderTeams() {
                           .join("")}
                       </select>
                     </label>
+                    <label class="swap-control">
+                      <span>Replace</span>
+                      <select data-replace-player="${player.id}">
+                        <option value="">Choose player</option>
+                        ${replacementOptions
+                          .map(
+                            (option) =>
+                              `<option value="${option.id}">${escapeHtml(option.name)}</option>`,
+                          )
+                          .join("")}
+                      </select>
+                    </label>
                   </div>
                 `,
               )
@@ -559,6 +575,12 @@ function renderTeams() {
     select.addEventListener("change", (event) => {
       if (!event.target.value) return;
       swapPlayers(event.target.dataset.swapPlayer, event.target.value);
+    });
+  });
+  teamsOutput.querySelectorAll("[data-replace-player]").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      if (!event.target.value) return;
+      replacePlayer(event.target.dataset.replacePlayer, event.target.value);
     });
   });
 
@@ -654,6 +676,28 @@ function swapPlayers(firstPlayerId, secondPlayerId) {
   first.team.players[first.playerIndex] = second.team.players[second.playerIndex];
   second.team.players[second.playerIndex] = firstPlayer;
   showWarning("");
+  renderTeams();
+}
+
+function replacePlayer(outgoingPlayerId, incomingPlayerId) {
+  const slot = findTeamSlot(outgoingPlayerId);
+  const incomingPlayer = rankedPlayers().find((player) => player.id === incomingPlayerId);
+  if (!slot || !incomingPlayer || selectedPlayerIds.includes(incomingPlayerId)) {
+    renderTeams();
+    return;
+  }
+
+  const outgoingPlayer = slot.team.players[slot.playerIndex];
+  slot.team.players[slot.playerIndex] = {
+    ...incomingPlayer,
+    seed: outgoingPlayer.seed,
+  };
+  selectedPlayerIds = selectedPlayerIds.map((id) =>
+    id === outgoingPlayerId ? incomingPlayerId : id,
+  );
+  activeNightId = null;
+  showWarning("");
+  renderSelector();
   renderTeams();
 }
 
