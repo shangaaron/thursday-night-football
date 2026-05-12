@@ -523,7 +523,7 @@ function renderTeams() {
             <div class="stat-box"><span class="muted">Total</span><strong>${team.totalScore}</strong></div>
             <div class="stat-box"><span class="muted">Average</span><strong>${team.averageScore.toFixed(1)}</strong></div>
           </div>
-          <p class="override-note">Balanced by seed pots. Team score spread: ${team.balanceSpread}. Manual override: swap any player with another team.</p>
+          <p class="override-note">Manual override: swap any player with another team.</p>
           <div class="team-list">
             ${team.players
               .map(
