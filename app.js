@@ -1,7 +1,7 @@
 const STORAGE_KEY = "sixAsideFootballManager:quarter:2026-05";
 const PREVIOUS_RANKS_KEY = "sixAsideFootballManager:previousRanks";
 const API_BASE = "/api";
-const ADMIN_PASSWORD = "thursdayfootball196!";
+const ADMIN_PASSWORD = "thursfooty";
 const PROTECTED_VIEWS = new Set(["admin", "leaderboard"]);
 
 const demoPlayers = [
