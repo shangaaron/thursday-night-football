@@ -44,6 +44,7 @@ const state = {
 };
 let selectedPlayerIds = [];
 let generatedTeams = [];
+let activeNightId = null;
 
 const views = document.querySelectorAll(".view");
 const navButtons = document.querySelectorAll("[data-view]");
@@ -72,6 +73,7 @@ navButtons.forEach((button) => {
 document.getElementById("generate-teams").addEventListener("click", () => {
   if (ensureAdminAccess("generate teams")) generateTeams();
 });
+document.getElementById("save-teams").addEventListener("click", saveTeamsForNight);
 document.getElementById("save-results").addEventListener("click", saveResults);
 document.getElementById("cancel-edit").addEventListener("click", resetPlayerForm);
 document.getElementById("reset-demo").addEventListener("click", loadRemoteData);
@@ -131,6 +133,7 @@ async function loadRemoteData() {
     const [players, nights] = await Promise.all([fetchPlayers(), fetchMatchNights()]);
     state.players = players;
     state.nights = nights;
+    hydratePendingNight();
     saveLocalSnapshot();
     renderAll();
   } catch (error) {
@@ -252,6 +255,28 @@ function fromDbNight(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function isCompletedNight(night) {
+  return Array.isArray(night.teamResults) && night.teamResults.length > 0;
+}
+
+function hydratePendingNight() {
+  if (generatedTeams.length) return;
+
+  const pendingNight = state.nights.find((night) => !isCompletedNight(night));
+  if (!pendingNight) {
+    activeNightId = null;
+    return;
+  }
+
+  activeNightId = pendingNight.id;
+  selectedPlayerIds = pendingNight.selectedPlayers || [];
+  generatedTeams = (pendingNight.teams || []).map((team) => ({
+    ...team,
+    goalDifferenceForNight: Number(team.goalDifferenceForNight || 0),
+  }));
+  if (pendingNight.date) nightDate.value = pendingNight.date;
 }
 
 function toDbNight(night) {
@@ -389,6 +414,7 @@ function generateTeams() {
     buildTeam("White team", [1, 16, 4, 13, 7, 10], seeds),
     buildTeam("Red team", [2, 15, 3, 14, 8, 9], seeds),
   ];
+  activeNightId = null;
 
   showWarning("");
   renderTeams();
@@ -500,6 +526,67 @@ function renderTeams() {
     .join("");
 }
 
+function buildNightPayload(teamResults = []) {
+  const now = new Date().toISOString();
+  return {
+    id: activeNightId || crypto.randomUUID(),
+    date: nightDate.value || new Date().toISOString().slice(0, 10),
+    selectedPlayers: selectedPlayerIds,
+    teams: generatedTeams.map((team) => ({
+      ...team,
+      players: team.players.map((player) => ({
+        id: player.id,
+        name: player.name,
+        score: player.score,
+        seed: player.seed,
+      })),
+    })),
+    teamResults,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function saveTeamsForNight() {
+  if (!ensureAdminAccess("save teams for the night")) return;
+
+  if (selectedPlayerIds.length !== 18 || generatedTeams.length !== 3) {
+    showWarning("Generate teams from exactly 18 selected players before saving them.");
+    return;
+  }
+
+  captureResultInputs();
+  refreshTeamStats();
+  const night = buildNightPayload([]);
+
+  try {
+    if (activeNightId) {
+      await supabaseFetch(`match_nights?id=eq.${activeNightId}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(toDbNight(night)),
+      });
+      state.nights = state.nights.map((item) => (item.id === activeNightId ? night : item));
+    } else {
+      const [savedNight] = await supabaseFetch("match_nights?select=*", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(toDbNight(night)),
+      });
+      const saved = fromDbNight(savedNight);
+      activeNightId = saved.id;
+      state.nights.unshift(saved);
+    }
+
+    saveLocalSnapshot();
+    showWarning("Teams saved for the night. Results can be entered later from any device.", "success");
+    renderHistory();
+  } catch (error) {
+    console.error(error);
+    showWarning(`Teams could not be saved to the live database. ${error.message}`);
+  }
+}
+
 function captureResultInputs() {
   resultsInputs.querySelectorAll("input").forEach((input) => {
     const team = generatedTeams.find((item) => item.id === input.dataset.teamId);
@@ -537,6 +624,10 @@ async function saveResults() {
     showWarning("Generate teams from exactly 18 selected players before saving results.");
     return;
   }
+  if (!activeNightId) {
+    showWarning("Save the teams for the night before entering final results.");
+    return;
+  }
 
   const currentRanks = Object.fromEntries(rankedPlayers().map((player) => [player.id, player.rank]));
   state.previousRanks = currentRanks;
@@ -561,27 +652,12 @@ async function saveResults() {
     });
   });
 
-  const night = {
-    id: crypto.randomUUID(),
-    date: nightDate.value || new Date().toISOString().slice(0, 10),
-    selectedPlayers: selectedPlayerIds,
-    teams: generatedTeams.map((team) => ({
-      ...team,
-      players: team.players.map((player) => ({
-        id: player.id,
-        name: player.name,
-        score: player.score,
-        seed: player.seed,
-      })),
-    })),
-    teamResults: generatedTeams.map((team) => ({
+  const teamResults = generatedTeams.map((team) => ({
       teamId: team.id,
       name: team.name,
       goalDifferenceForNight: team.goalDifferenceForNight,
-    })),
-    createdAt: now,
-    updatedAt: now,
-  };
+    }));
+  const night = buildNightPayload(teamResults);
 
   try {
     await Promise.all(
@@ -593,12 +669,12 @@ async function saveResults() {
         }),
       ),
     );
-    await supabaseFetch("match_nights", {
-      method: "POST",
+    await supabaseFetch(`match_nights?id=eq.${activeNightId}`, {
+      method: "PATCH",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify(toDbNight(night)),
     });
-    state.nights.unshift(night);
+    state.nights = state.nights.map((item) => (item.id === activeNightId ? night : item));
   } catch (error) {
     console.error(error);
     showWarning(`Results could not be saved to the live database. ${error.message}`);
@@ -608,6 +684,7 @@ async function saveResults() {
 
   selectedPlayerIds = [];
   generatedTeams = [];
+  activeNightId = null;
   saveLocalSnapshot();
   renderAll();
   setView("night");
@@ -732,12 +809,14 @@ function renderHistory() {
 
   historyList.innerHTML = state.nights
     .map(
-      (night) => `
-        <article class="history-card">
+      (night) => {
+        const completed = isCompletedNight(night);
+        return `
+          <article class="history-card">
           <div class="history-card-heading">
             <div>
               <h3>${formatDate(night.date)}</h3>
-              <p class="muted">${night.selectedPlayers.length} players</p>
+              <p class="muted">${night.selectedPlayers.length} players | ${completed ? "Results saved" : "Teams saved, results pending"}</p>
             </div>
             <button class="small-button danger-button" data-delete-night="${night.id}">Remove night</button>
           </div>
@@ -746,7 +825,7 @@ function renderHistory() {
               .map(
                 (team) => `
                   <section class="history-team">
-                    <strong>${team.name}: ${formatSigned(team.goalDifferenceForNight)} GD</strong>
+                    <strong>${team.name}${completed ? `: ${formatSigned(team.goalDifferenceForNight)} GD` : ""}</strong>
                     <p class="muted">Total ${team.totalScore} | Avg ${team.averageScore.toFixed(1)}</p>
                     <ul>
                       ${team.players
@@ -759,7 +838,8 @@ function renderHistory() {
               .join("")}
           </div>
         </article>
-      `,
+      `;
+      },
     )
     .join("");
 
@@ -773,8 +853,11 @@ async function deleteNight(id) {
 
   const night = state.nights.find((item) => item.id === id);
   const label = night ? formatDate(night.date) : "this night";
+  const completed = night ? isCompletedNight(night) : true;
   const shouldDelete = window.confirm(
-    `Remove ${label}? This will subtract that night's games and goal differences from the players.`,
+    completed
+      ? `Remove ${label}? This will subtract that night's games and goal differences from the players.`
+      : `Remove the saved teams for ${label}? No player stats will be changed.`,
   );
   if (!shouldDelete) return;
 
@@ -793,9 +876,10 @@ async function deleteNight(id) {
   }
 }
 
-function showWarning(message) {
+function showWarning(message, type = "error") {
   teamWarning.textContent = message;
   teamWarning.classList.toggle("is-visible", Boolean(message));
+  teamWarning.classList.toggle("is-success", type === "success");
 }
 
 async function resetDemoData() {

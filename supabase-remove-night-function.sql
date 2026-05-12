@@ -6,7 +6,7 @@ set search_path = public
 as $$
 begin
   with target_night as (
-    select teams
+    select teams, team_results
     from public.match_nights
     where id = target_night_id
   ),
@@ -18,6 +18,7 @@ begin
     from target_night
     cross join lateral jsonb_array_elements(teams) as team_item
     cross join lateral jsonb_array_elements(team_item -> 'players') as player_item
+    where jsonb_array_length(team_results) > 0
     group by (player_item ->> 'id')::uuid
   )
   update public.players
