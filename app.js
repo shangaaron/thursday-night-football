@@ -533,9 +533,7 @@ function renderTeams() {
               .map(
                 (player) => `
                   <div class="team-player">
-                    <div>
-                      <strong>${escapeHtml(player.name)}</strong>
-                    </div>
+                    <strong class="team-player-name">${escapeHtml(player.name)}</strong>
                     <label class="swap-control">
                       <span>Swap</span>
                       <select data-swap-player="${player.id}">
