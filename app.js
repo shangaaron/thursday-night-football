@@ -409,24 +409,66 @@ function generateTeams() {
       return a.name.localeCompare(b.name);
     });
 
-  generatedTeams = [
-    buildTeam("Black team", [0, 17, 5, 12, 6, 11], seeds),
-    buildTeam("White team", [1, 16, 4, 13, 7, 10], seeds),
-    buildTeam("Red team", [2, 15, 3, 14, 8, 9], seeds),
-  ];
+  generatedTeams = buildBalancedTeams(seeds);
   activeNightId = null;
 
   showWarning("");
   renderTeams();
 }
 
-function buildTeam(name, seedIndexes, seeds) {
-  const players = seedIndexes.map((index) => ({ ...seeds[index], seed: index + 1 }));
+function buildBalancedTeams(seeds) {
+  const teamNames = ["Black team", "White team", "Red team"];
+  const pots = [];
+  for (let index = 0; index < seeds.length; index += 3) {
+    pots.push(seeds.slice(index, index + 3).map((player, offset) => ({ ...player, seed: index + offset + 1 })));
+  }
+
+  const permutations = [
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0],
+  ];
+  let bestTeams = null;
+  let bestScore = Infinity;
+  let bestSpread = Infinity;
+
+  function search(potIndex, teams) {
+    if (potIndex === pots.length) {
+      const totals = teams.map((team) => team.reduce((sum, player) => sum + player.score, 0));
+      const spread = Math.max(...totals) - Math.min(...totals);
+      const average = totals.reduce((sum, total) => sum + total, 0) / totals.length;
+      const variance = totals.reduce((sum, total) => sum + (total - average) ** 2, 0);
+      const score = spread * 1000 + variance;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestSpread = spread;
+        bestTeams = teams.map((team) => [...team]);
+      }
+      return;
+    }
+
+    permutations.forEach((permutation) => {
+      const nextTeams = teams.map((team, teamIndex) => [...team, pots[potIndex][permutation[teamIndex]]]);
+      search(potIndex + 1, nextTeams);
+    });
+  }
+
+  search(0, [[], [], []]);
+
+  return bestTeams.map((players, index) => buildTeam(teamNames[index], players, bestSpread));
+}
+
+function buildTeam(name, players, balanceSpread = 0) {
   return {
     id: crypto.randomUUID(),
     name,
     players,
     ...calculateTeamStats(players),
+    balanceSpread,
     goalDifferenceForNight: 0,
   };
 }
@@ -443,6 +485,12 @@ function refreshTeamStats() {
   generatedTeams = generatedTeams.map((team) => ({
     ...team,
     ...calculateTeamStats(team.players),
+  }));
+  const totals = generatedTeams.map((team) => team.totalScore);
+  const spread = totals.length ? Math.max(...totals) - Math.min(...totals) : 0;
+  generatedTeams = generatedTeams.map((team) => ({
+    ...team,
+    balanceSpread: spread,
   }));
 }
 
@@ -475,7 +523,7 @@ function renderTeams() {
             <div class="stat-box"><span class="muted">Total</span><strong>${team.totalScore}</strong></div>
             <div class="stat-box"><span class="muted">Average</span><strong>${team.averageScore.toFixed(1)}</strong></div>
           </div>
-          <p class="override-note">Manual override: swap any player with another team.</p>
+          <p class="override-note">Balanced by seed pots. Team score spread: ${team.balanceSpread}. Manual override: swap any player with another team.</p>
           <div class="team-list">
             ${team.players
               .map(
