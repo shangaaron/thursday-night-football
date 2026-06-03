@@ -3,6 +3,16 @@ const PREVIOUS_RANKS_KEY = "sixAsideFootballManager:previousRanks";
 const API_BASE = "/api";
 const ADMIN_PASSWORD = "thursfooty";
 const PROTECTED_VIEWS = new Set(["admin", "leaderboard"]);
+const ATHLETIC_BALANCE_PLAYERS = new Set([
+  "gary",
+  "kadan",
+  "josh",
+  "bailey",
+  "charlton",
+  "louis",
+  "frank",
+  "ethan",
+]);
 
 const demoPlayers = [
   ["Josh", 5, 19],
@@ -418,6 +428,10 @@ function generateTeams() {
 
 function buildBalancedTeams(seeds) {
   const teamNames = ["Black team", "White team", "Red team"];
+  const selectedAthleticCount = seeds.filter((player) =>
+    ATHLETIC_BALANCE_PLAYERS.has(player.name.trim().toLowerCase()),
+  ).length;
+  const athleticLimit = Math.max(2, Math.ceil(selectedAthleticCount / 3));
   const pots = [];
   for (let index = 0; index < seeds.length; index += 3) {
     pots.push(seeds.slice(index, index + 3).map((player, offset) => ({ ...player, seed: index + offset + 1 })));
@@ -438,10 +452,16 @@ function buildBalancedTeams(seeds) {
   function search(potIndex, teams) {
     if (potIndex === pots.length) {
       const totals = teams.map((team) => team.reduce((sum, player) => sum + player.score, 0));
+      const athleticOverflow = teams.reduce((sum, team) => {
+        const count = team.filter((player) =>
+          ATHLETIC_BALANCE_PLAYERS.has(player.name.trim().toLowerCase()),
+        ).length;
+        return sum + Math.max(0, count - athleticLimit);
+      }, 0);
       const spread = Math.max(...totals) - Math.min(...totals);
       const average = totals.reduce((sum, total) => sum + total, 0) / totals.length;
       const variance = totals.reduce((sum, total) => sum + (total - average) ** 2, 0);
-      const score = spread * 1000 + variance;
+      const score = athleticOverflow * 1000000 + spread * 1000 + variance;
 
       if (score < bestScore) {
         bestScore = score;
