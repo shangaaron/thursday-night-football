@@ -13,6 +13,28 @@ const ATHLETIC_BALANCE_PLAYERS = new Set([
   "frank",
   "ethan",
 ]);
+const TIER_ONE_PLAYERS = new Set([
+  "gary",
+  "kadan",
+  "charlton",
+  "josh",
+  "bukola",
+  "bailey",
+  "strikey",
+  "frank",
+  "owen",
+  "brandon",
+  "stephen",
+]);
+const TIER_THREE_PLAYERS = new Set([
+  "simon",
+  "bruno",
+  "jez",
+  "nathan",
+  "nedved",
+  "segun",
+  "adedoyin",
+]);
 const REPEAT_TEAMMATE_TARGET = 2;
 const REPEAT_TEAMMATE_LIMIT = 3;
 
@@ -431,6 +453,7 @@ function generateTeams() {
 function buildBalancedTeams(seeds) {
   const teamNames = ["Black team", "White team", "Red team"];
   const recentTeammates = getRecentTeammates();
+  const selectedTierCounts = getTierCounts(seeds);
   const selectedAthleticCount = seeds.filter((player) =>
     ATHLETIC_BALANCE_PLAYERS.has(player.name.trim().toLowerCase()),
   ).length;
@@ -455,6 +478,7 @@ function buildBalancedTeams(seeds) {
   function search(potIndex, teams) {
     if (potIndex === pots.length) {
       const totals = teams.map((team) => team.reduce((sum, player) => sum + player.score, 0));
+      const tierBalance = calculateTierBalance(teams, selectedTierCounts);
       const athleticOverflow = teams.reduce((sum, team) => {
         const count = team.filter((player) =>
           ATHLETIC_BALANCE_PLAYERS.has(player.name.trim().toLowerCase()),
@@ -466,6 +490,9 @@ function buildBalancedTeams(seeds) {
       const average = totals.reduce((sum, total) => sum + total, 0) / totals.length;
       const variance = totals.reduce((sum, total) => sum + (total - average) ** 2, 0);
       const score =
+        tierBalance.hardOverflow * 10000000000000000 +
+        tierBalance.sameTierPairs * 100000000000000 +
+        tierBalance.spread * 10000000000000 +
         athleticOverflow * 1000000000000 +
         teammateRepeat.hardOverflow * 10000000000 +
         teammateRepeat.softOverflow * 100000000 +
@@ -490,6 +517,52 @@ function buildBalancedTeams(seeds) {
   search(0, [[], [], []]);
 
   return bestTeams.map((players, index) => buildTeam(teamNames[index], players, bestSpread));
+}
+
+function getPlayerTier(player) {
+  const name = player.name.trim().toLowerCase();
+  if (TIER_ONE_PLAYERS.has(name)) return 1;
+  if (TIER_THREE_PLAYERS.has(name)) return 3;
+  return 2;
+}
+
+function getTierCounts(players) {
+  return players.reduce(
+    (counts, player) => {
+      const tier = getPlayerTier(player);
+      counts[tier] += 1;
+      return counts;
+    },
+    { 1: 0, 2: 0, 3: 0 },
+  );
+}
+
+function calculateTierBalance(teams, selectedTierCounts) {
+  const tierOneLimit = Math.ceil(selectedTierCounts[1] / 3);
+  const tierThreeLimit = Math.ceil(selectedTierCounts[3] / 3);
+  let hardOverflow = 0;
+  let sameTierPairs = 0;
+  const tierOneCounts = [];
+  const tierThreeCounts = [];
+
+  teams.forEach((team) => {
+    const counts = getTierCounts(team);
+    tierOneCounts.push(counts[1]);
+    tierThreeCounts.push(counts[3]);
+    hardOverflow += Math.max(0, counts[1] - tierOneLimit);
+    hardOverflow += Math.max(0, counts[3] - tierThreeLimit);
+    sameTierPairs += (counts[1] * (counts[1] - 1)) / 2;
+    sameTierPairs += (counts[3] * (counts[3] - 1)) / 2;
+  });
+
+  const tierOneSpread = Math.max(...tierOneCounts) - Math.min(...tierOneCounts);
+  const tierThreeSpread = Math.max(...tierThreeCounts) - Math.min(...tierThreeCounts);
+
+  return {
+    hardOverflow,
+    sameTierPairs,
+    spread: tierOneSpread + tierThreeSpread,
+  };
 }
 
 function getRecentTeammates() {
