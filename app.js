@@ -13,6 +13,8 @@ const ATHLETIC_BALANCE_PLAYERS = new Set([
   "frank",
   "ethan",
 ]);
+const REPEAT_TEAMMATE_TARGET = 2;
+const REPEAT_TEAMMATE_LIMIT = 3;
 
 const demoPlayers = [
   ["Josh", 5, 19],
@@ -428,6 +430,7 @@ function generateTeams() {
 
 function buildBalancedTeams(seeds) {
   const teamNames = ["Black team", "White team", "Red team"];
+  const recentTeammates = getRecentTeammates();
   const selectedAthleticCount = seeds.filter((player) =>
     ATHLETIC_BALANCE_PLAYERS.has(player.name.trim().toLowerCase()),
   ).length;
@@ -458,10 +461,17 @@ function buildBalancedTeams(seeds) {
         ).length;
         return sum + Math.max(0, count - athleticLimit);
       }, 0);
+      const teammateRepeat = calculateTeammateRepeat(teams, recentTeammates);
       const spread = Math.max(...totals) - Math.min(...totals);
       const average = totals.reduce((sum, total) => sum + total, 0) / totals.length;
       const variance = totals.reduce((sum, total) => sum + (total - average) ** 2, 0);
-      const score = athleticOverflow * 1000000 + spread * 1000 + variance;
+      const score =
+        athleticOverflow * 1000000000000 +
+        teammateRepeat.hardOverflow * 10000000000 +
+        teammateRepeat.softOverflow * 100000000 +
+        teammateRepeat.repeatPairs * 10000 +
+        spread * 1000 +
+        variance;
 
       if (score < bestScore) {
         bestScore = score;
@@ -480,6 +490,56 @@ function buildBalancedTeams(seeds) {
   search(0, [[], [], []]);
 
   return bestTeams.map((players, index) => buildTeam(teamNames[index], players, bestSpread));
+}
+
+function getRecentTeammates() {
+  const lastCompletedNight = state.nights.find((night) => isCompletedNight(night));
+  const teammateMap = new Map();
+  if (!lastCompletedNight) return teammateMap;
+
+  lastCompletedNight.teams.forEach((team) => {
+    const playerIds = team.players.map((player) => player.id);
+    playerIds.forEach((playerId) => {
+      const teammates = teammateMap.get(playerId) || new Set();
+      playerIds.forEach((teammateId) => {
+        if (teammateId !== playerId) teammates.add(teammateId);
+      });
+      teammateMap.set(playerId, teammates);
+    });
+  });
+
+  return teammateMap;
+}
+
+function calculateTeammateRepeat(teams, recentTeammates) {
+  if (!recentTeammates.size) {
+    return { hardOverflow: 0, softOverflow: 0, repeatPairs: 0 };
+  }
+
+  let hardOverflow = 0;
+  let softOverflow = 0;
+  let repeatPairs = 0;
+
+  teams.forEach((team) => {
+    team.forEach((player) => {
+      const previousTeammates = recentTeammates.get(player.id);
+      if (!previousTeammates) return;
+
+      const repeatedCount = team.filter(
+        (teammate) => teammate.id !== player.id && previousTeammates.has(teammate.id),
+      ).length;
+
+      repeatPairs += repeatedCount;
+      hardOverflow += Math.max(0, repeatedCount - REPEAT_TEAMMATE_LIMIT);
+      softOverflow += Math.max(0, repeatedCount - REPEAT_TEAMMATE_TARGET);
+    });
+  });
+
+  return {
+    hardOverflow,
+    softOverflow,
+    repeatPairs: repeatPairs / 2,
+  };
 }
 
 function buildTeam(name, players, balanceSpread = 0) {
