@@ -265,6 +265,38 @@ th {
   text-transform: uppercase;
 }
 
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.sort-button span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--green-dark);
+  font-size: 0.78rem;
+}
+
+.sort-button.is-active span {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
 tbody tr:last-child td {
   border-bottom: 0;
 }

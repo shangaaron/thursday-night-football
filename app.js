@@ -85,6 +85,7 @@ let selectedPlayerIds = [];
 let generatedTeams = [];
 let activeNightId = null;
 let activeLeagueView = "q3";
+let activeLeagueSort = null;
 
 const views = document.querySelectorAll(".view");
 const navButtons = document.querySelectorAll("[data-view]");
@@ -92,6 +93,7 @@ const leaderboardBody = document.getElementById("leaderboard-body");
 const podium = document.getElementById("podium");
 const leagueNote = document.getElementById("league-note");
 const leagueTabs = document.querySelectorAll("[data-league-view]");
+const leagueSortButtons = document.querySelectorAll("[data-league-sort]");
 const playerSelector = document.getElementById("player-selector");
 const selectionCount = document.getElementById("selection-count");
 const teamWarning = document.getElementById("team-warning");
@@ -114,6 +116,13 @@ navButtons.forEach((button) => {
 leagueTabs.forEach((button) => {
   button.addEventListener("click", () => {
     activeLeagueView = button.dataset.leagueView;
+    activeLeagueSort = null;
+    renderLeaderboard();
+  });
+});
+leagueSortButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    activeLeagueSort = activeLeagueSort === button.dataset.leagueSort ? null : button.dataset.leagueSort;
     renderLeaderboard();
   });
 });
@@ -362,10 +371,13 @@ function renderAll() {
 
 function renderLeaderboard() {
   const league = getLeagueView(activeLeagueView);
-  const players = rankedPlayers(league.players);
+  const players = sortLeaguePlayers(rankedPlayers(league.players));
   const showMovement = activeLeagueView === "year";
   leagueTabs.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.leagueView === activeLeagueView);
+  });
+  leagueSortButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.leagueSort === activeLeagueSort);
   });
   leagueNote.textContent = league.note;
 
@@ -409,6 +421,18 @@ function renderLeaderboard() {
       `,
     )
     .join("");
+}
+
+function sortLeaguePlayers(players) {
+  if (!activeLeagueSort) return players;
+
+  return [...players].sort((a, b) => {
+    const statDiff = Number(b[activeLeagueSort]) - Number(a[activeLeagueSort]);
+    if (statDiff !== 0) return statDiff;
+    const rankDiff = a.rank - b.rank;
+    if (rankDiff !== 0) return rankDiff;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function getLeagueView(view) {
@@ -491,8 +515,12 @@ function getMovement(rank, previousRank) {
   return `<span class="move-down">-${rank - previousRank}</span>`;
 }
 
+function teamSelectionRankings() {
+  return rankedPlayers(state.players);
+}
+
 function renderSelector() {
-  const players = [...rankedPlayers()].sort((a, b) => a.name.localeCompare(b.name));
+  const players = [...teamSelectionRankings()].sort((a, b) => a.name.localeCompare(b.name));
   selectionCount.textContent = `${selectedPlayerIds.length} / 18`;
   selectionCount.style.color = selectedPlayerIds.length === 18 ? "var(--green-dark)" : "var(--danger)";
 
@@ -532,7 +560,7 @@ function generateTeams() {
     return;
   }
 
-  const selected = rankedPlayers().filter((player) => selectedPlayerIds.includes(player.id));
+  const selected = teamSelectionRankings().filter((player) => selectedPlayerIds.includes(player.id));
   const byId = new Map(selected.map((player) => [player.id, player]));
   const seeds = selectedPlayerIds
     .map((id) => byId.get(id))
@@ -768,7 +796,7 @@ function renderTeams() {
     })),
   );
   const selectedSet = new Set(selectedPlayerIds);
-  const replacementOptions = rankedPlayers()
+  const replacementOptions = teamSelectionRankings()
     .filter((player) => !selectedSet.has(player.id))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -936,7 +964,7 @@ function swapPlayers(firstPlayerId, secondPlayerId) {
 
 function replacePlayer(outgoingPlayerId, incomingPlayerId) {
   const slot = findTeamSlot(outgoingPlayerId);
-  const incomingPlayer = rankedPlayers().find((player) => player.id === incomingPlayerId);
+  const incomingPlayer = teamSelectionRankings().find((player) => player.id === incomingPlayerId);
   if (!slot || !incomingPlayer || selectedPlayerIds.includes(incomingPlayerId)) {
     renderTeams();
     return;
