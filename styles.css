@@ -212,6 +212,36 @@ main {
   font-weight: 900;
 }
 
+.league-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.league-tab {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 10px;
+  font-weight: 900;
+}
+
+.league-tab.is-active {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.league-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
 .table-shell {
   overflow-x: auto;
 }
@@ -237,6 +267,12 @@ th {
 
 tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.empty-cell {
+  color: var(--muted);
+  font-weight: 800;
+  text-align: center;
 }
 
 .rank-cell {
@@ -559,6 +595,7 @@ tbody tr:last-child td {
   .split-layout,
   .teams-grid,
   .podium,
+  .league-tabs,
   .results-inputs,
   .history-teams,
   .player-form,

@@ -40,6 +40,8 @@ const TIER_THREE_PLAYERS = new Set([
 ]);
 const REPEAT_TEAMMATE_TARGET = 2;
 const REPEAT_TEAMMATE_LIMIT = 3;
+const THIRD_QUARTER_START = "2026-07-01";
+const FOURTH_QUARTER_START = "2026-10-01";
 
 const demoPlayers = [
   ["Josh", 5, 19],
@@ -82,11 +84,14 @@ const state = {
 let selectedPlayerIds = [];
 let generatedTeams = [];
 let activeNightId = null;
+let activeLeagueView = "q3";
 
 const views = document.querySelectorAll(".view");
 const navButtons = document.querySelectorAll("[data-view]");
 const leaderboardBody = document.getElementById("leaderboard-body");
 const podium = document.getElementById("podium");
+const leagueNote = document.getElementById("league-note");
+const leagueTabs = document.querySelectorAll("[data-league-view]");
 const playerSelector = document.getElementById("player-selector");
 const selectionCount = document.getElementById("selection-count");
 const teamWarning = document.getElementById("team-warning");
@@ -105,6 +110,12 @@ nightDate.valueAsDate = new Date();
 
 navButtons.forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
+});
+leagueTabs.forEach((button) => {
+  button.addEventListener("click", () => {
+    activeLeagueView = button.dataset.leagueView;
+    renderLeaderboard();
+  });
 });
 
 document.getElementById("generate-teams").addEventListener("click", () => {
@@ -350,11 +361,28 @@ function renderAll() {
 }
 
 function renderLeaderboard() {
-  const players = rankedPlayers();
+  const league = getLeagueView(activeLeagueView);
+  const players = rankedPlayers(league.players);
+  const showMovement = activeLeagueView === "year";
+  leagueTabs.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.leagueView === activeLeagueView);
+  });
+  leagueNote.textContent = league.note;
+
+  if (!players.length) {
+    podium.innerHTML = "";
+    leaderboardBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="empty-cell">${league.emptyMessage}</td>
+      </tr>
+    `;
+    return;
+  }
+
   leaderboardBody.innerHTML = players
     .map((player) => {
       const previous = state.previousRanks[player.id];
-      const movement = getMovement(player.rank, previous);
+      const movement = showMovement ? getMovement(player.rank, previous) : '<span class="muted">-</span>';
       return `
         <tr>
           <td class="rank-cell">#${player.rank}</td>
@@ -381,6 +409,79 @@ function renderLeaderboard() {
       `,
     )
     .join("");
+}
+
+function getLeagueView(view) {
+  const q3Adjustments = getQuarterAdjustments(THIRD_QUARTER_START, FOURTH_QUARTER_START);
+
+  if (view === "q1") {
+    return {
+      players: [],
+      note: "1st quarter league to be uploaded.",
+      emptyMessage: "1st quarter league to be uploaded.",
+    };
+  }
+
+  if (view === "q2") {
+    return {
+      players: state.players.map((player) => {
+        const adjustment = q3Adjustments.get(player.id) || { gamesPlayed: 0, goalDifference: 0 };
+        return {
+          ...player,
+          gamesPlayed: Math.max(0, player.gamesPlayed - adjustment.gamesPlayed),
+          goalDifference: player.goalDifference - adjustment.goalDifference,
+        };
+      }),
+      note: "2nd quarter league, excluding results from 2 July 2026 onward.",
+      emptyMessage: "No 2nd quarter data found.",
+    };
+  }
+
+  if (view === "year") {
+    return {
+      players: state.players,
+      note: "Year total combines all uploaded quarter data currently held in the live league table.",
+      emptyMessage: "No year total data found.",
+    };
+  }
+
+  return {
+    players: buildPlayersFromAdjustments(q3Adjustments),
+    note: "3rd quarter league from 2 July 2026 to 30 September 2026.",
+    emptyMessage: "No 3rd quarter results have been saved yet.",
+  };
+}
+
+function getQuarterAdjustments(startDate, endDate) {
+  const adjustments = new Map();
+  state.nights
+    .filter((night) => isCompletedNight(night) && night.date >= startDate && night.date < endDate)
+    .forEach((night) => {
+      night.teams.forEach((team) => {
+        const goalDifference = Number(team.goalDifferenceForNight || 0);
+        team.players.forEach((teamPlayer) => {
+          const current = adjustments.get(teamPlayer.id) || { gamesPlayed: 0, goalDifference: 0 };
+          adjustments.set(teamPlayer.id, {
+            gamesPlayed: current.gamesPlayed + 1,
+            goalDifference: current.goalDifference + goalDifference,
+          });
+        });
+      });
+    });
+  return adjustments;
+}
+
+function buildPlayersFromAdjustments(adjustments) {
+  return state.players
+    .map((player) => {
+      const adjustment = adjustments.get(player.id) || { gamesPlayed: 0, goalDifference: 0 };
+      return {
+        ...player,
+        gamesPlayed: adjustment.gamesPlayed,
+        goalDifference: adjustment.goalDifference,
+      };
+    })
+    .filter((player) => player.gamesPlayed > 0);
 }
 
 function getMovement(rank, previousRank) {
