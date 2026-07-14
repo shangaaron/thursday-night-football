@@ -36,6 +36,7 @@ const TIER_THREE_PLAYERS = new Set([
   "adedoyin",
   "will",
   "jacob",
+  "aaron",
 ]);
 const REPEAT_TEAMMATE_TARGET = 2;
 const REPEAT_TEAMMATE_LIMIT = 3;
